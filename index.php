@@ -1,7 +1,131 @@
 <html>
 <head>
     <title>Canvas tutorial</title>
+    <script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
     <script type="text/javascript">
+
+        $(document).ready(function(){
+
+            $.ajax({
+                url: 'ral-json/colors.json',
+                async: true,
+                dataType: 'json',
+                success: function (response) {
+                    ral = response;
+
+                    var code, group_name,
+                        html_options = '',
+                        $select = $('#js-ral-groups'),
+                        $colors_info = $('#js-colors-list');
+
+                    // show options in select
+                    for (code in color_groups) {
+                        group_name = color_groups[code];
+                        html_options += '<option value=' + code + '>' + group_name + '</option>';
+                    }
+
+                    $select.html(html_options).on('change', function() {
+                        var chosen_group = parseInt($(this).val()),
+                            colors = [], code;
+
+                        for (code in ral) {
+                            if (parseInt(code) >= chosen_group && parseInt(code) < (chosen_group + 1000)) {
+                                colors.push(ral[code]);
+                            }
+                        }
+
+                        try {
+                            clearInterval(existed_interval);
+                        } catch (e) {
+                            //
+                        }
+
+                        start_circles(30, colors, 80, function(circles, timer) {
+
+                            var html = '', i = 0;
+                            for (i; i < circles.length; i++) {
+                                html += '<div class="ral-item"><b style="width:16px;height:16px;float:left;margin-right:8px;background-color:' + circles[i].color + ';"></b><p>RGB HEX: '+ circles[i].color +'</p></div>';
+                            }
+
+                            existed_interval = timer;
+                            $colors_info.html(html);
+
+
+                        });
+
+                    });
+
+                }
+            });
+
+
+        });
+
+        var drawed_circles_offset = 0,
+            existed_interval = null,
+            ral = {},
+            color_groups = {
+                '1000' : 'Желтая',
+                '2000' : 'Оранжевая',
+                '3000' : 'Красная',
+                '4000' : 'Фиолетовая',
+                '5000' : 'Синяя',
+                '6000' : 'Зеленая',
+                '7000' : 'Серая',
+                '8000' : 'Коричневая',
+                '9000' : 'Белая'
+            };
+
+
+        function start_circles(speed, colors, distance, callback) {
+
+            var ctx = get_canvas_context(),
+                circles = randomize_figures(10, colors),
+                positions = [],
+                figure_type_list = {
+                    'message' : function(ctx, x, y) {
+                        ctx.moveTo(x, y);
+                        ctx.quadraticCurveTo(x - 50, y, x - 50, y + 37.5);
+                        ctx.quadraticCurveTo(x - 50, y + 75, x - 25, y + 75);
+                        ctx.quadraticCurveTo(x - 25, y + 85, x - 45, y + 85);
+                        ctx.quadraticCurveTo(x - 15, y + 95, x - 10, y + 75);
+                        ctx.quadraticCurveTo(x + 50, y + 75, x + 50, y + 37.5);
+                        ctx.quadraticCurveTo(x + 50, y, x, y);
+                    },
+                    'heart' : function(ctx, x, y) {
+                        ctx.moveTo(x, y);
+                        ctx.bezierCurveTo(x, y-3, x-5, y-15, x-25, y-20);
+                        ctx.bezierCurveTo(x-55, y-15, x-55, y+22.5, x-55, y+22.5);
+                        ctx.bezierCurveTo(x-55, y+40, x-35, y+62, x, y+60);
+                        ctx.bezierCurveTo(x+35, y+62, x+55, y+40, x+55, y+22.5);
+                        ctx.bezierCurveTo(x+55, y+22.5, x+55, y-15, x+25, y-15);
+                        ctx.bezierCurveTo(x+10, y-15, x, y-3, x, y);
+                    }
+                },
+                timer = setInterval(function() {
+                    positions = define_figures_positions(circles.length, 180, 180, distance, drawed_circles_offset++);
+                    ctx.clearRect(0, 0, 400, 400);
+                    draw_figures(ctx, circles, positions, figure_type_list);
+                }, speed);
+
+                callback(circles, timer)
+        }
+
+
+        /**
+         * 1. Возможность сочетать цвета в рамках одной группы из ral
+         * 2. Возможность управлять:
+         *  группой рал (определять множество цветов) (предустановленные варианты, возможность собрать собственную палитру)
+         *  скоростью вращения
+         *  радиусом
+         *  размером кругов
+         *  количеством кругов
+         *  цветом фона
+         * 3, возможность сохранять настройки в виде ссылки
+         * 4. возможность инициализировать настройки по ссылке
+         */
+
+
 
         /**
          * @throws Error
@@ -34,11 +158,15 @@
             return { 'width' : canvas.width, 'height' : canvas.height };
         }
 
-        /**
-         * Задача 1:
-         * вращающиеся относительно оси круги
-         */
 
+        /**
+         *
+         * @param color
+         * @param type
+         * @param pos
+         * @param method
+         * @returns {{color: null, type: null, method: null, pos: null}}
+         */
         function create_figure(color, type, pos, method) {
 
             method = method ? method : 'stroke';
@@ -96,25 +224,26 @@
         /**
          *
          */
-        function randomize_figures(num) {
+        function randomize_figures(num, colors) {
 
-            var list = [], i = 0;
+            var list = [], i = 0,
+                coef = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1, 1, 1, 1, 0.9],
+                color_index = 0;
+
+            console.log(colors);
 
             for (i = 0; i < num; i++) {
                 list[i] = create_figure();
-                list[i].color = '#' + get_random_color();
+                //list[i].color = '#' + get_random_color();
+                color_index = Math.round(Math.random() * (colors.length - 1));
+                console.log(colors[color_index])
+                list[i].color = colors[color_index]['rgb_hex'];
 
                 if (i % 2 == 0) {
                     list[i].method = 'fill';
                 }
 
-                if (i % 3 == 0) {
-                    list[i].type = 'heart';
-                } else if (i % 5 == 0) {
-                    list[i].type = 'message';
-                } else {
-                    list[i].pos['rad'] = 20;
-                }
+                list[i].pos['rad'] = coef[Math.round(Math.random() * 10)] * 25;
             }
 
             return list;
@@ -154,7 +283,7 @@
          * @param position_list {Array}
          * @param draw_fn {Function} Функция, получающая на вход {CanvasRenderingContext2D} и объект фигуры
          */
-        function draw_figures(ctx, path_list, position_list) {
+        function draw_figures(ctx, path_list, position_list, figure_type_list) {
 
             var i = 0;
 
@@ -186,62 +315,13 @@
         }
 
 
-        /**
-         * Задача 2:
-         * отрисовывать любую указанную фигуру, если указана пользователем
-         * если нет - рисует круг по умолчанию
-         */
-
-        /**
-         * Задача 3:
-         * прочитать об остальных возможностях canvas
-         * продумать несложную игру по дороге домой
-         */
-
-       var figure_type_list = {
-            'message' : function(ctx, x, y) {
-                ctx.moveTo(x, y);
-                ctx.quadraticCurveTo(x - 50, y, x - 50, y + 37.5);
-                ctx.quadraticCurveTo(x - 50, y + 75, x - 25, y + 75);
-                ctx.quadraticCurveTo(x - 25, y + 85, x - 45, y + 85);
-                ctx.quadraticCurveTo(x - 15, y + 95, x - 10, y + 75);
-                ctx.quadraticCurveTo(x + 50, y + 75, x + 50, y + 37.5);
-                ctx.quadraticCurveTo(x + 50, y, x, y);
-            },
-            'heart' : function(ctx, x, y) {
-                ctx.moveTo(x, y);
-                ctx.bezierCurveTo(x, y-3, x-5, y-15, x-25, y-20);
-                ctx.bezierCurveTo(x-55, y-15, x-55, y+22.5, x-55, y+22.5);
-                ctx.bezierCurveTo(x-55, y+40, x-35, y+62, x, y+60);
-                ctx.bezierCurveTo(x+35, y+62, x+55, y+40, x+55, y+22.5);
-                ctx.bezierCurveTo(x+55, y+22.5, x+55, y-15, x+25, y-15);
-                ctx.bezierCurveTo(x+10, y-15, x, y-3, x, y);
-            }
-        }
-
-
-        /**
-         *
-         */
-        function main() {
-
-            var ctx = get_canvas_context(),
-                i = 0, timer,
-                circles = randomize_figures(10),
-                positions = [];
-
-            timer = setInterval(function() {
-                positions = define_figures_positions(circles.length, 150, 150, 100, i++);
-                ctx.clearRect(0, 0, 400, 500);
-                draw_figures(ctx, circles, positions);
-            }, 10);
-
-        }
-
     </script>
 
 </head>
-<body onload="main()">
-<canvas id="tutorial" width="400" height="500"></canvas>
+<body>
+<canvas id="tutorial" style="float: left;" width="400" height="400"></canvas>
+<label for="js-ral-groups">Группа цветов:</label>
+<select id="js-ral-groups" style="margin-bottom: 10px;"></select>
+<div id="js-colors-list"></div>
 </body>
 </html>
